@@ -1,6 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import pool from '../db.js';
+import jwt from "jsonwebtoken";
+
 
 const router = express.Router();
 
@@ -55,6 +57,55 @@ router.post('/signup', async (req, res) => {
     }
     
     res.status(500).json({ error: "Server error", details: err.message });
+  }
+});
+
+// ----------------------
+// LOGIN ROUTE
+// ----------------------
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // 1. Missing fields
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required." });
+    }
+
+    // 2. Find user by email
+    const result = await pool.query(
+      `SELECT * FROM users WHERE email = $1`,
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: "Invalid email or password." });
+    }
+
+    const user = result.rows[0];
+
+    // 3. Check password
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res.status(400).json({ error: "Invalid email or password." });
+    }
+
+    // 4. Create JWT token
+    const token = jwt.sign(
+      { user_id: user.id, email: user.email },  
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }  // token lasts 7 days
+    );
+
+    // 5. Send it back
+    return res.json({
+      message: "Login successful",
+      token
+    });
+
+  } catch (err) {
+    console.error("🔥 LOGIN ERROR:", err);
+    return res.status(500).json({ error: "Server error." });
   }
 });
 

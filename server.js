@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import authMiddleware from "./middleware/auth.js";
 
 process.on('uncaughtException', console.error);
 process.on('unhandledRejection', console.error);
@@ -33,4 +34,11 @@ app.listen(PORT, () => {
   console.log(`🔥 SERVER RUNNING on port ${PORT}`);
   console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
   console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
+});
+
+app.get("/auth/protected", authMiddleware, (req, res) => {
+  res.json({
+    message: "You accessed a protected route!",
+    user: req.user
+  });
 });
