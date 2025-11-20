@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import authMiddleware from "./middleware/auth.js";
+import pool from './db.js';  // Import pool instead of Pool from pg
 
 process.on('uncaughtException', console.error);
 process.on('unhandledRejection', console.error);
@@ -33,6 +34,24 @@ app.use('/auth', authRoutes);
 // Root test route
 app.get('/', (req, res) => {
   res.json({ message: 'Backend running' });
+});
+
+// Health check with database status
+app.get('/health', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ 
+      status: 'healthy',
+      database: 'connected',
+      timestamp: result.rows[0].now 
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: err.message 
+    });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
