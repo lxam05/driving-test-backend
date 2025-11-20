@@ -4,6 +4,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 
+process.on('uncaughtException', console.error);
+process.on('unhandledRejection', console.error);
+
 dotenv.config();
 
 const app = express();
