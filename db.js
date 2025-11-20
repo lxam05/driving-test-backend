@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log("Connected to DB:", process.env.DATABASE_URL);
+
 // Check if DATABASE_URL is set
 if (!process.env.DATABASE_URL) {
   console.error('❌ ERROR: DATABASE_URL is not set in .env file');
