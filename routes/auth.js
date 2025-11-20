@@ -60,13 +60,13 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// ----------------------
-// LOGIN ROUTE
-// ----------------------
+// Login route
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  console.log("🔥 LOGIN ROUTE HIT");
 
   try {
+    const { email, password } = req.body;
+
     // 1. Missing fields
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required." });
@@ -74,7 +74,7 @@ router.post('/login', async (req, res) => {
 
     // 2. Find user by email
     const result = await pool.query(
-      `SELECT * FROM users WHERE email = $1`,
+      "SELECT * FROM users WHERE email = $1",
       [email]
     );
 
@@ -91,57 +91,26 @@ router.post('/login', async (req, res) => {
     }
 
     // 4. Create JWT token
+    if (!process.env.JWT_SECRET) {
+      console.error("⚠️ JWT_SECRET not set in environment variables");
+      return res.status(500).json({ error: "Server configuration error." });
+    }
+
     const token = jwt.sign(
-      { user_id: user.id, email: user.email },  
+      {
+        user_id: user.user_id,
+        email: user.email,
+        username: user.username   // ← add this
+      },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }  // token lasts 7 days
+      { expiresIn: '7d' }
     );
+    
 
     // 5. Send it back
     return res.json({
       message: "Login successful",
-      token
-    });
-
-  } catch (err) {
-    console.error("🔥 LOGIN ERROR:", err);
-    return res.status(500).json({ error: "Server error." });
-  }
-});
-
-// Login route
-router.post('/login', async (req, res) => {
-  console.log("🔥 LOGIN ROUTE HIT");
-
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
-    }
-
-    // Find user by email
-    const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const user = result.rows[0];
-
-    // Check password
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Return user info (without password)
-    res.json({ 
-      message: "Login success",
+      token,
       user: {
         id: user.id,
         email: user.email,
@@ -152,6 +121,7 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error("🔥 LOGIN ERROR:", err);
     
+    // Provide more specific error messages
     if (err.code === '42P01') { // Table doesn't exist
       return res.status(500).json({ error: "Database table not found. Please create the 'users' table." });
     }
@@ -159,7 +129,7 @@ router.post('/login', async (req, res) => {
       return res.status(500).json({ error: "Database connection failed. Check your DATABASE_URL." });
     }
     
-    res.status(500).json({ error: "Server error", details: err.message });
+    return res.status(500).json({ error: "Server error", details: err.message });
   }
 });
 
