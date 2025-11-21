@@ -15,5 +15,3 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- Optional: Enable Row Level Security (RLS) if needed
 -- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
-DELETE FROM users;
