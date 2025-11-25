@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import mockTestRoutes from './routes/mockTests.js';
 import authMiddleware from "./middleware/auth.js";
 import pool from './db.js';  // Import pool instead of Pool from pg
 
@@ -34,6 +35,7 @@ app.use(cors({
 
 // Mount routes
 app.use('/auth', authRoutes);
+app.use('/mock-tests', mockTestRoutes);
 
 // Root test route
 app.get('/', (req, res) => {
