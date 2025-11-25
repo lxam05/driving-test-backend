@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS mock_test_results (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   correct_count INTEGER NOT NULL,
   total_questions INTEGER NOT NULL,
   percentage INTEGER NOT NULL,
