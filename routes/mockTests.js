@@ -7,13 +7,27 @@ const router = express.Router();
 // Save mock test result (protected route)
 router.post('/save', authMiddleware, async (req, res) => {
   try {
+    console.log('🔥 MOCK TEST SAVE ROUTE HIT');
+    console.log('Request body:', req.body);
+    console.log('User from token:', req.user);
+    
     const { correct_count, total_questions, percentage, passed, time_taken_seconds, time_remaining_seconds } = req.body;
     const user_id = req.user.user_id || req.user.id;
 
+    console.log('Extracted user_id:', user_id);
+
     // Validate required fields
     if (correct_count === undefined || total_questions === undefined || percentage === undefined || passed === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      console.error('Missing required fields');
+      return res.status(400).json({ error: 'Missing required fields', received: req.body });
     }
+
+    if (!user_id) {
+      console.error('No user_id found in token');
+      return res.status(400).json({ error: 'User ID not found in token', user: req.user });
+    }
+
+    console.log('Attempting to insert:', { user_id, correct_count, total_questions, percentage, passed });
 
     // Insert the test result
     const result = await pool.query(
@@ -24,13 +38,17 @@ router.post('/save', authMiddleware, async (req, res) => {
       [user_id, correct_count, total_questions, percentage, passed, time_taken_seconds || null, time_remaining_seconds || null]
     );
 
+    console.log('✅ Test result saved successfully:', result.rows[0]);
+
     res.json({
       message: 'Test result saved successfully',
       result: result.rows[0]
     });
 
   } catch (err) {
-    console.error('Error saving mock test result:', err);
+    console.error('❌ Error saving mock test result:', err);
+    console.error('Error details:', err.message);
+    console.error('Error stack:', err.stack);
     res.status(500).json({ error: 'Failed to save test result', details: err.message });
   }
 });
