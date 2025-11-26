@@ -4,10 +4,15 @@ import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI client lazily (only when needed)
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not set in environment variables');
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 // System prompt for driving test assistance
 const SYSTEM_PROMPT = `You are a helpful assistant specializing in Irish driving test preparation. You help users with:
@@ -43,6 +48,9 @@ router.post('/message', authMiddleware, async (req, res) => {
       ...conversationHistory, // Include previous conversation context
       { role: 'user', content: message.trim() }
     ];
+
+    // Get OpenAI client (lazy initialization)
+    const openai = getOpenAIClient();
 
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
