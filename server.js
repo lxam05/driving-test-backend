@@ -100,12 +100,16 @@ const PORT = process.env.PORT || 3000;
 
 // Start server with error handling
 try {
-  app.listen(PORT, () => {
-    console.log(`🔥 SERVER RUNNING on port ${PORT}`);
-    console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
-    console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
-    console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  });
+// Make sure PORT is dynamic for Railway hosting
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🔥 SERVER RUNNING on port ${PORT}`);
+  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
+  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
+  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+});
+
 } catch (err) {
   console.error('❌ Failed to start server:', err);
   process.exit(1);
