@@ -50,17 +50,27 @@ app.use(cors({
 
 
 // Mount routes with error handling
+console.log('📦 Loading routes...');
 try {
-  console.log('📦 Loading routes...');
   app.use('/auth', authRoutes);
   console.log('  ✓ Auth routes loaded');
+} catch (err) {
+  console.error('❌ Error loading auth routes:', err);
+  // Don't throw - allow server to start even if one route fails
+}
+
+try {
   app.use('/mock-tests', mockTestRoutes);
   console.log('  ✓ Mock test routes loaded');
+} catch (err) {
+  console.error('❌ Error loading mock test routes:', err);
+}
+
+try {
   app.use('/chatbot', chatbotRoutes);
   console.log('  ✓ Chatbot routes loaded');
 } catch (err) {
-  console.error('❌ Error loading routes:', err);
-  throw err;
+  console.error('❌ Error loading chatbot routes:', err);
 }
 
 // Root test route
@@ -88,11 +98,18 @@ app.get('/health', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`🔥 SERVER RUNNING on port ${PORT}`);
-  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
-  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
-});
+// Start server with error handling
+try {
+  app.listen(PORT, () => {
+    console.log(`🔥 SERVER RUNNING on port ${PORT}`);
+    console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
+    console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
+    console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  });
+} catch (err) {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
+}
 
 app.get("/auth/protected", authMiddleware, (req, res) => {
   res.json({
