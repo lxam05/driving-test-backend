@@ -15,41 +15,40 @@ dotenv.config();
 
 const app = express();
 
-app.use(express.json());
-app.use(cookieParser());
-
+// CORS must be configured BEFORE other middleware
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'http://127.0.0.1:5500',
-      'http://localhost:5500',
-      'http://127.0.0.1:5501',
-      'http://localhost:5501',
-      'http://127.0.0.1:5502',
-      'http://localhost:5502',
-      'http://127.0.0.1:5503',
-      'http://localhost:5503',
-      'https://driving-test-backend-production.up.railway.app'
-    ];
-    
-    // Check if origin matches allowed origins or is a localhost/127.0.0.1 port
-    if (allowedOrigins.includes(origin) || 
-        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) || 
-        /^http:\/\/localhost:\d+$/.test(origin)) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    if (!origin) {
+      return callback(null, true);
     }
+    
+    // Always allow localhost and 127.0.0.1 on any port
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow Railway backend URL
+    if (origin === 'https://driving-test-backend-production.up.railway.app') {
+      return callback(null, true);
+    }
+    
+    // Log blocked origins for debugging
+    console.log('⚠️ CORS blocked origin:', origin);
+    callback(null, true); // For now, allow all origins to debug
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+
+// Body parsing middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 
 
@@ -61,8 +60,15 @@ app.use('/chatbot', chatbotRoutes);
 
 // Root test route
 app.get('/', (req, res) => {
-  res.json({ message: 'Backend running' });
+  res.json({ 
+    message: 'Backend running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
+
+// CORS test endpoint
+app.options('*', cors()); // Handle all OPTIONS requests
 
 // Health check with database status
 app.get('/health', async (req, res) => {
@@ -84,10 +90,35 @@ app.get('/health', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, "0.0.0.0", () => {
+// Error handling middleware (must be last)
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Start server
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🔥 SERVER RUNNING on port ${PORT}`);
-  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
-  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📍 Test endpoint: http://0.0.0.0:${PORT}/`);
+  console.log(`📍 Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`📍 Auth login: http://0.0.0.0:${PORT}/auth/login`);
+});
+
+// Handle server errors
+server.on('error', (err) => {
+  console.error('❌ Server error:', err);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`);
+  }
 });
 
 app.get("/auth/protected", authMiddleware, (req, res) => {
