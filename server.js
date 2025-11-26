@@ -33,30 +33,26 @@ app.get('/health', (req, res) => {
 // CORS must be configured BEFORE other middleware
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) {
+    if (!origin) return callback(null, true);
+
+    // Allow local testing (VS Code Live Server)
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
       return callback(null, true);
     }
-    
-    // Always allow localhost and 127.0.0.1 on any port
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      return callback(null, true);
-    }
-    
-    // Allow Railway backend URL
+
+    // Allow production backend (Railway)
     if (origin === 'https://driving-test-backend-production.up.railway.app') {
       return callback(null, true);
     }
-    
-    // Allow all origins for now (you can restrict later)
-    callback(null, true);
+
+    // TEMP: Allow everything for testing — remove later if needed
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
+
 
 // Body parsing middleware
 app.use(express.json());
