@@ -1,8 +1,17 @@
 // ------------------------
 // ENVIRONMENT CONFIG
 // ------------------------
+// ENV CONFIG
 import dotenv from "dotenv";
-dotenv.config(); // Local & Railway-safe
+
+// Only load .env locally — NEVER in Railway
+if (!process.env.PORT) {
+  console.log("🌍 Running Local → Loading .env");
+  dotenv.config();
+} else {
+  console.log("🚀 Running on Railway → Using built-in environment variables");
+}
+
 
 // ------------------------
 // IMPORTS
@@ -36,6 +45,8 @@ console.log("  - PORT:", process.env.PORT ? process.env.PORT : "Using 3000 local
 console.log("  - DATABASE_URL:", process.env.DATABASE_URL ? "Set" : "❌ Missing");
 console.log("  - JWT_SECRET:", process.env.JWT_SECRET ? "Set" : "❌ Missing");
 console.log("  - OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "Set" : "❌ Missing");
+
+console.log("🔍 Railway PORT", process.env.PORT || "❌ No PORT received from Railway");
 
 // ------------------------
 // EXPRESS SETUP
