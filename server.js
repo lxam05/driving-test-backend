@@ -29,35 +29,22 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      // Local development support (VSCode Live Server)
-      if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
-        return callback(null, true);
-      }
-
-      // Production backend origin
-      if (origin === "https://driving-test-backend-production.up.railway.app") {
-        return callback(null, true);
-      }
-
-      // TEMPORARY: allow all origins during testing
-      return callback(null, true);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    origin: [
+      "http://localhost:5173",                        // local dev (optional)
+      "https://YOUR_FRONTEND_DOMAIN"                 // ← I will fill this for you
+    ],
+    credentials: true
   })
 );
+
 
 /* ============================================
    🔥 DATABASE CHECK
 =============================================== */
-db.connect((err) => {
-  if (err) console.error("❌ DB Connection Failed:", err);
-  else console.log("📦 Database connected successfully");
-});
+db.query("SELECT 1")
+  .then(() => console.log("📦 Database pool connected successfully"))
+  .catch(err => console.error("❌ Database connection failed:", err));
+
 
 /* ============================================
    🔥 ROUTES
