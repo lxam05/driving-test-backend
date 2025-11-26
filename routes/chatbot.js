@@ -25,6 +25,30 @@ const SYSTEM_PROMPT = `You are a helpful assistant specializing in Irish driving
 
 Be concise, accurate, and friendly. Focus on providing clear, actionable information that will help users pass their driving test.`;
 
+// GET /chatbot/test - Test if OpenAI API key is configured (protected route)
+router.get('/test', authMiddleware, (req, res) => {
+  console.log('🔥 CHATBOT TEST ROUTE HIT');
+  const hasKey = !!process.env.OPENAI_API_KEY;
+  const keyLength = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0;
+  const keyPrefix = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 7) : 'N/A';
+  
+  console.log('API Key check:', {
+    hasKey,
+    keyLength,
+    keyPrefix,
+    allEnvKeys: Object.keys(process.env).filter(k => k.includes('OPENAI'))
+  });
+  
+  res.json({
+    configured: hasKey,
+    keyLength: keyLength,
+    keyPrefix: keyPrefix,
+    message: hasKey 
+      ? 'OpenAI API key is configured' 
+      : 'OpenAI API key is NOT configured'
+  });
+});
+
 // POST /chatbot/message - Send message to chatbot (protected route)
 router.post('/message', authMiddleware, async (req, res) => {
   console.log('🔥 CHATBOT MESSAGE ROUTE HIT');
@@ -70,21 +94,42 @@ router.post('/message', authMiddleware, async (req, res) => {
 
   } catch (err) {
     console.error('❌ Error in chatbot route:', err);
+    console.error('Error stack:', err.stack);
+    console.error('Error name:', err.name);
 
     // Handle specific OpenAI API errors
-    if (err.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key. Please check your OpenAI API configuration.' });
+    if (err.message && err.message.includes('OPENAI_API_KEY')) {
+      return res.status(503).json({ 
+        error: 'Chatbot service is not configured. OPENAI_API_KEY is missing.',
+        details: 'Please check environment variables in Railway.'
+      });
     }
+    
+    if (err.status === 401 || (err.message && err.message.includes('Invalid API key'))) {
+      return res.status(500).json({ 
+        error: 'Invalid API key. Please check your OpenAI API configuration.',
+        details: err.message 
+      });
+    }
+    
     if (err.status === 429) {
-      return res.status(429).json({ error: 'Rate limit exceeded. Please try again in a moment.' });
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded. Please try again in a moment.',
+        details: err.message 
+      });
     }
-    if (err.status === 500) {
-      return res.status(500).json({ error: 'OpenAI service error. Please try again later.' });
+    
+    if (err.status === 500 || (err.message && err.message.includes('OpenAI'))) {
+      return res.status(500).json({ 
+        error: 'OpenAI service error. Please try again later.',
+        details: err.message 
+      });
     }
 
+    // Generic error response
     res.status(500).json({ 
       error: 'Failed to get chatbot response', 
-      details: err.message 
+      details: err.message || 'Unknown error occurred'
     });
   }
 });
