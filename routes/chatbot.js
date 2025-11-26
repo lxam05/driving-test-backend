@@ -100,75 +100,62 @@ router.post('/message', authMiddleware, async (req, res) => {
       return res.status(500).json({ error: 'Chatbot service is not configured' });
     }
 
-    // Build messages array for OpenAI
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...conversationHistory, // Include previous conversation context
-      { role: 'user', content: message.trim() }
-    ];
-
-    // Get OpenAI client (lazy initialization)
+    // Get OpenAI client
     const openai = getOpenAIClient();
 
-    // Call OpenAI API
+    // 🆕 --- CALL OPENAI USING THE UPDATED RESPONSES API ---
     const response = await openai.responses.create({
-      model: "gpt-4.1-mini", // modern, cheap, better than gpt-3.5-turbo
-      input: messages,
-      max_output_tokens: 500
+      model: "gpt-4.1-mini", // modern model (better + cheaper)
+      input: [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...conversationHistory,
+        { role: "user", content: message.trim() }
+      ],
+      max_output_tokens: 500,
+      temperature: 0.7
     });
-    
-    const aiResponse = response.output_text;
-    
 
-    const aiResponse = completion.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+    // ⬇️ YOUR aiResponse VARIABLE STILL EXISTS
+    const aiResponse = response.output_text;
 
     console.log('✅ Chatbot response generated successfully');
-    res.json({
+
+    return res.json({
       response: aiResponse,
-      model: completion.model,
+      model: "gpt-4.1-mini"
     });
 
   } catch (err) {
     console.error('❌ Error in chatbot route:', err);
-    console.error('Error stack:', err.stack);
-    console.error('Error name:', err.name);
 
-    // Handle specific OpenAI API errors
-    if (err.message && err.message.includes('OPENAI_API_KEY')) {
-      return res.status(503).json({ 
+    if (err.message?.includes('OPENAI_API_KEY')) {
+      return res.status(503).json({
         error: 'Chatbot service is not configured. OPENAI_API_KEY is missing.',
-        details: 'Please check environment variables in Railway.'
-      });
-    }
-    
-    if (err.status === 401 || (err.message && err.message.includes('Invalid API key'))) {
-      return res.status(500).json({ 
-        error: 'Invalid API key. Please check your OpenAI API configuration.',
-        details: err.message 
-      });
-    }
-    
-    if (err.status === 429) {
-      return res.status(429).json({ 
-        error: 'Rate limit exceeded. Please try again in a moment.',
-        details: err.message 
-      });
-    }
-    
-    if (err.status === 500 || (err.message && err.message.includes('OpenAI'))) {
-      return res.status(500).json({ 
-        error: 'OpenAI service error. Please try again later.',
-        details: err.message 
+        details: 'Check Railway environment variables.'
       });
     }
 
-    // Generic error response
-    res.status(500).json({ 
-      error: 'Failed to get chatbot response', 
+    if (err.status === 401 || err.message?.includes('Invalid API key')) {
+      return res.status(500).json({
+        error: 'Invalid API key. Please check your OpenAI API configuration.',
+        details: err.message
+      });
+    }
+
+    if (err.status === 429) {
+      return res.status(429).json({
+        error: 'Rate limit exceeded. Please try again shortly.',
+        details: err.message
+      });
+    }
+
+    return res.status(500).json({
+      error: 'Failed to get chatbot response',
       details: err.message || 'Unknown error occurred'
     });
   }
 });
+
 
 export default router;
 
