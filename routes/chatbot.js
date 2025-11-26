@@ -9,8 +9,20 @@ function getOpenAIClient() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set in environment variables');
   }
+  
+  // Trim whitespace and remove quotes if present
+  const apiKey = process.env.OPENAI_API_KEY.trim().replace(/^["']|["']$/g, '');
+  
+  // Validate key format (should start with sk-)
+  if (!apiKey.startsWith('sk-')) {
+    console.error('⚠️ API key does not start with "sk-"');
+    throw new Error('Invalid API key format. Key should start with "sk-"');
+  }
+  
+  console.log('🔑 Using API key with length:', apiKey.length, 'prefix:', apiKey.substring(0, 7));
+  
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: apiKey,
   });
 }
 
@@ -28,23 +40,41 @@ Be concise, accurate, and friendly. Focus on providing clear, actionable informa
 // GET /chatbot/test - Test if OpenAI API key is configured (protected route)
 router.get('/test', authMiddleware, (req, res) => {
   console.log('🔥 CHATBOT TEST ROUTE HIT');
-  const hasKey = !!process.env.OPENAI_API_KEY;
-  const keyLength = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0;
-  const keyPrefix = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 7) : 'N/A';
+  const rawKey = process.env.OPENAI_API_KEY;
+  const hasKey = !!rawKey;
   
-  console.log('API Key check:', {
-    hasKey,
-    keyLength,
-    keyPrefix,
-    allEnvKeys: Object.keys(process.env).filter(k => k.includes('OPENAI'))
-  });
+  let keyInfo = {
+    hasKey: false,
+    rawLength: 0,
+    trimmedLength: 0,
+    rawPrefix: 'N/A',
+    trimmedPrefix: 'N/A',
+    hasQuotes: false,
+    hasWhitespace: false,
+    isValidFormat: false
+  };
+  
+  if (rawKey) {
+    const trimmed = rawKey.trim().replace(/^["']|["']$/g, '');
+    keyInfo = {
+      hasKey: true,
+      rawLength: rawKey.length,
+      trimmedLength: trimmed.length,
+      rawPrefix: rawKey.substring(0, Math.min(10, rawKey.length)),
+      trimmedPrefix: trimmed.substring(0, Math.min(10, trimmed.length)),
+      hasQuotes: rawKey.startsWith('"') || rawKey.startsWith("'") || rawKey.endsWith('"') || rawKey.endsWith("'"),
+      hasWhitespace: rawKey !== rawKey.trim(),
+      isValidFormat: trimmed.startsWith('sk-')
+    };
+  }
+  
+  console.log('API Key check:', keyInfo);
   
   res.json({
     configured: hasKey,
-    keyLength: keyLength,
-    keyPrefix: keyPrefix,
+    keyInfo: keyInfo,
     message: hasKey 
-      ? 'OpenAI API key is configured' 
+      ? (keyInfo.isValidFormat ? 'OpenAI API key is configured and formatted correctly' : 'OpenAI API key is configured but format may be invalid')
       : 'OpenAI API key is NOT configured'
   });
 });
