@@ -101,3 +101,5 @@ app.listen(PORT, "0.0.0.0", ()=>{
   console.log(`🔥 Server bound to port: ${PORT}`);
   console.log(`📍 Health: http://0.0.0.0:${PORT}/health`);
 });
+
+setInterval(() => {}, 1 << 30);  // keeps event loop open
