@@ -74,6 +74,7 @@ try {
 }
 
 // Root test route
+// Root test route
 app.get('/', (req, res) => {
   res.json({ message: 'Backend running' });
 });
@@ -96,9 +97,10 @@ app.get('/health', async (req, res) => {
   }
 });
 
-//--------------------------------------------------
-//  REQUIRED FOR RAILWAY (THIS IS THE FIX)
-//--------------------------------------------------
+
+
+// ========== FINAL WORKING RAILWAY LISTEN BLOCK ========== //
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
@@ -106,28 +108,4 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
   console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
-});
-
-// Start server with error handling
-try {
-// Make sure PORT is dynamic for Railway hosting
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`🔥 SERVER RUNNING on port ${PORT}`);
-  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
-  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-});
-
-} catch (err) {
-  console.error('❌ Failed to start server:', err);
-  process.exit(1);
-}
-
-app.get("/auth/protected", authMiddleware, (req, res) => {
-  res.json({
-    message: "You accessed a protected route!",
-    user: req.user
-  });
 });
