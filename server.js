@@ -70,9 +70,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// CORS test endpoint
-app.options('*', cors());
-
 // Simple health check (doesn't require database) - Railway needs this
 app.get('/health', (req, res) => {
   res.json({ 
