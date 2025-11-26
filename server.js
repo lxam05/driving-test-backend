@@ -23,6 +23,13 @@ dotenv.config();
 
 const app = express();
 
+// Simple health check (doesn't require database) - Railway needs this
+// MUST be registered BEFORE other middleware to ensure it's always accessible
+app.get('/health', (req, res) => {
+  console.log('🏥 Health check called');
+  res.status(200).send('OK');
+});
+
 // CORS must be configured BEFORE other middleware
 app.use(cors({
   origin: function (origin, callback) {
@@ -67,15 +74,6 @@ app.get('/', (req, res) => {
     message: 'Backend running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// Simple health check (doesn't require database) - Railway needs this
-app.get('/health', (req, res) => {
-  console.log('🏥 Health check called');
-  res.status(200).json({ 
-    status: 'healthy',
-    timestamp: new Date().toISOString()
   });
 });
 
