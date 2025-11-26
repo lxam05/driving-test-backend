@@ -6,37 +6,36 @@ import chatbotRoutes from "./routes/chatbot.js";
 import db from "./db.js";
 
 dotenv.config();
-
 const app = express();
 
 /* ================================
-   🔥 HEALTH CHECK & ROOT
+   🔥 CORS FIRST — REQUIRED FOR BROWSER
+================================ */
+app.use(cors({
+    origin: [
+        "https://driveflow-frontend-production.up.railway.app",
+        "http://localhost:5173"
+    ],
+    credentials: true
+}));
+
+/* ================================
+   🔥 ALWAYS BEFORE ROUTES
+================================ */
+app.use(express.json());
+
+/* ================================
+   🔥 HEALTH CHECK + ROOT
 ================================ */
 app.get("/health", (req, res) => res.status(200).send("OK"));
 app.get("/", (req, res) => res.send("Backend is running 🚀"));
 
 /* ================================
-   🔥 CORS CONFIG (FINAL + WORKING)
-================================ */
-app.use(cors({
-    origin: [
-        "http://localhost:5173",
-        "https://driveflow-frontend-production.up.railway.app"
-    ],
-    credentials: true,
-}));
-
-/* ================================
-   🔥 EXPRESS MIDDLEWARE
-================================ */
-app.use(express.json());
-
-/* ================================
-   🔥 DATABASE CHECK (fixed)
+   🔥 DATABASE CONNECT CHECK
 ================================ */
 db.query("SELECT 1")
   .then(() => console.log("📦 Database pool connected successfully"))
-  .catch(err => console.error("❌ Database connection failed:", err.message));
+  .catch(err => console.error("❌ Database connection failed:", err));
 
 /* ================================
    🔥 ROUTES
@@ -45,10 +44,7 @@ app.use("/auth", authRoutes);
 app.use("/chatbot", chatbotRoutes);
 
 /* ================================
-   🔥 START SERVER ON RAILWAY PORT
+   🔥 SERVER LISTEN
 ================================ */
 const PORT = process.env.PORT || 8080;
-
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Server is live on port ${PORT}`);
-});
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server live on ${PORT}`));
