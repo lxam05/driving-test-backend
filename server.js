@@ -72,7 +72,8 @@ app.get('/', (req, res) => {
 
 // Simple health check (doesn't require database) - Railway needs this
 app.get('/health', (req, res) => {
-  res.json({ 
+  console.log('🏥 Health check called');
+  res.status(200).json({ 
     status: 'healthy',
     timestamp: new Date().toISOString()
   });
@@ -116,6 +117,11 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🔥 SERVER RUNNING on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📍 Health: http://0.0.0.0:${PORT}/health`);
+  
+  // Small delay to ensure server is fully ready
+  setTimeout(() => {
+    console.log('✅ Server fully initialized and ready');
+  }, 100);
 });
 
 // Handle server errors
