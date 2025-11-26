@@ -4,6 +4,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import mockTestRoutes from './routes/mockTests.js';
+import chatbotRoutes from './routes/chatbot.js';
 import authMiddleware from "./middleware/auth.js";
 import pool from './db.js';  // Import pool instead of Pool from pg
 
@@ -36,6 +37,7 @@ app.use(cors({
 // Mount routes
 app.use('/auth', authRoutes);
 app.use('/mock-tests', mockTestRoutes);
+app.use('/chatbot', chatbotRoutes);
 
 // Root test route
 app.get('/', (req, res) => {
