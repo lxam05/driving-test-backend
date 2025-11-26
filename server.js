@@ -6,10 +6,18 @@ import authRoutes from './routes/auth.js';
 import mockTestRoutes from './routes/mockTests.js';
 import chatbotRoutes from './routes/chatbot.js';
 import authMiddleware from "./middleware/auth.js";
-import pool from './db.js';  // Import pool instead of Pool from pg
+import pool from './db.js';
 
-process.on('uncaughtException', console.error);
-process.on('unhandledRejection', console.error);
+// Better error handling - prevent crashes
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION (server will continue):', err);
+  // Don't exit - let the server keep running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION (server will continue):', reason);
+  // Don't exit - let the server keep running
+});
 
 dotenv.config();
 
@@ -18,7 +26,6 @@ const app = express();
 // CORS must be configured BEFORE other middleware
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
     if (!origin) {
       return callback(null, true);
     }
@@ -33,9 +40,8 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // Log blocked origins for debugging
-    console.log('⚠️ CORS blocked origin:', origin);
-    callback(null, true); // For now, allow all origins to debug
+    // Allow all origins for now (you can restrict later)
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -49,9 +55,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-
-
 
 // Mount routes
 app.use('/auth', authRoutes);
@@ -68,10 +71,18 @@ app.get('/', (req, res) => {
 });
 
 // CORS test endpoint
-app.options('*', cors()); // Handle all OPTIONS requests
+app.options('*', cors());
 
-// Health check with database status
-app.get('/health', async (req, res) => {
+// Simple health check (doesn't require database) - Railway needs this
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Database health check (separate endpoint)
+app.get('/health/db', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
     res.json({ 
@@ -90,16 +101,15 @@ app.get('/health', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-// Error handling middleware (must be last)
+// Error handling middleware (must be last, before 404)
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
+  console.error('❌ Request Error:', err);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: err.message || 'Internal server error'
   });
 });
 
-// 404 handler
+// 404 handler (must be absolute last)
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
@@ -108,9 +118,7 @@ app.use((req, res) => {
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🔥 SERVER RUNNING on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📍 Test endpoint: http://0.0.0.0:${PORT}/`);
-  console.log(`📍 Health check: http://0.0.0.0:${PORT}/health`);
-  console.log(`📍 Auth login: http://0.0.0.0:${PORT}/auth/login`);
+  console.log(`📍 Health: http://0.0.0.0:${PORT}/health`);
 });
 
 // Handle server errors
@@ -121,6 +129,7 @@ server.on('error', (err) => {
   }
 });
 
+// Protected route (moved after server starts)
 app.get("/auth/protected", authMiddleware, (req, res) => {
   res.json({
     message: "You accessed a protected route!",
