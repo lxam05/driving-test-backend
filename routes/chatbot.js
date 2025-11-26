@@ -111,12 +111,14 @@ router.post('/message', authMiddleware, async (req, res) => {
     const openai = getOpenAIClient();
 
     // Call OpenAI API
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 500, // Limit response length
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini", // modern, cheap, better than gpt-3.5-turbo
+      input: messages,
+      max_output_tokens: 500
     });
+    
+    const aiResponse = response.output_text;
+    
 
     const aiResponse = completion.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
 
