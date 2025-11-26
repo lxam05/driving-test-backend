@@ -13,50 +13,22 @@ router.get('/ping', (req, res) => {
 });
 
 // Signup route
-router.post('/signup', async (req, res) => {
-  console.log("🔥 SIGNUP ROUTE HIT");
-
+router.post('/login', async (req, res) => {
   try {
-    const { email, username, password } = req.body;
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-    if (!email || !username || !password) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
+    // TODO: Look up user in DB
+    // const user = await pool.query(...);
 
-    // check if exists
-    const exists = await pool.query(
-      "SELECT * FROM users WHERE email = $1 OR username = $2",
-      [email, username]
-    );
+    // TODO: Validate password
+    // const valid = await bcrypt.compare(password, user.password);
+    // if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
-    if (exists.rows.length > 0) {
-      return res.status(400).json({ error: "User exists" });
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-
-    await pool.query(
-      "INSERT INTO users (email, username, password) VALUES ($1, $2, $3)",
-      [email, username, hashed]
-    );
-
-    res.json({ message: "Signup success" });
-
+    return res.json({ message: "Logged in successfully" });
   } catch (err) {
-    console.error("🔥 SIGNUP ERROR:", err);
-    
-    // Provide more specific error messages
-    if (err.code === '23505') { // PostgreSQL unique violation
-      return res.status(400).json({ error: "User already exists" });
-    }
-    if (err.code === '42P01') { // Table doesn't exist
-      return res.status(500).json({ error: "Database table not found. Please create the 'users' table." });
-    }
-    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-      return res.status(500).json({ error: "Database connection failed. Check your DATABASE_URL." });
-    }
-    
-    res.status(500).json({ error: "Server error", details: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
