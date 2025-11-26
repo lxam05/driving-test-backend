@@ -12,12 +12,16 @@ const app = express();
    🔥 CORS FIRST — REQUIRED FOR BROWSER
 ================================ */
 app.use(cors({
-    origin: [
-        "https://driveflow-frontend-production.up.railway.app",
-        "http://localhost:5173"
-    ],
-    credentials: true
+  origin: [
+    "https://driveflow-frontend-production.up.railway.app",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:5173",     // if using vite
+    "http://127.0.0.1:5173"
+  ],
+  credentials: true
 }));
+
 
 /* ================================
    🔥 ALWAYS BEFORE ROUTES
