@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from 'express';
 import OpenAI from 'openai';
 import authMiddleware from '../middleware/auth.js';
@@ -86,6 +88,9 @@ router.get('/test', authMiddleware, (req, res) => {
 // POST /chatbot/message - Send message to chatbot (protected route)
 router.post('/message', authMiddleware, async (req, res) => {
   console.log('🔥 CHATBOT MESSAGE ROUTE HIT');
+  console.log("🔍 OPENAI key from Railway:", process.env.OPENAI_API_KEY ? "FOUND" : "MISSING");
+  console.log("🔍 First 10 chars:", process.env.OPENAI_API_KEY?.substring(0,10));
+
   try {
     const { message, conversationHistory = [] } = req.body;
 
