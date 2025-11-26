@@ -83,14 +83,10 @@ catch (e) { console.error('❌ Failed to load chatbot routes', e); }
 // ------------------------
 app.get('/', (req,res)=>{ res.json({status:"Backend running"}) });
 
-app.get('/health', async (req,res)=>{
-  try{
-    const result = await pool.query("SELECT NOW()");
-    res.json({status:"healthy", database:"connected", time:result.rows[0].now});
-  } catch (err){
-    res.status(500).json({status:"unhealthy", database:"disconnected", error:err.message});
-  }
+app.get("/health", (req,res) => {
+  res.status(200).json({ status: "ok" });
 });
+
 
 // ------------------------
 // RAILWAY PORT LISTENER  🚀
