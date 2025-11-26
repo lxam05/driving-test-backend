@@ -8,10 +8,25 @@ import chatbotRoutes from './routes/chatbot.js';
 import authMiddleware from "./middleware/auth.js";
 import pool from './db.js';  // Import pool instead of Pool from pg
 
-process.on('uncaughtException', console.error);
-process.on('unhandledRejection', console.error);
+// Better error handling
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION at:', promise);
+  console.error('Reason:', reason);
+});
 
 dotenv.config();
+
+console.log('🔧 Environment check:');
+console.log('  - PORT:', process.env.PORT || '3000 (default)');
+console.log('  - DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'NOT SET');
+console.log('  - JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'NOT SET');
+console.log('  - OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'Set' : 'NOT SET');
 
 const app = express();
 
@@ -34,10 +49,19 @@ app.use(cors({
 
 
 
-// Mount routes
-app.use('/auth', authRoutes);
-app.use('/mock-tests', mockTestRoutes);
-app.use('/chatbot', chatbotRoutes);
+// Mount routes with error handling
+try {
+  console.log('📦 Loading routes...');
+  app.use('/auth', authRoutes);
+  console.log('  ✓ Auth routes loaded');
+  app.use('/mock-tests', mockTestRoutes);
+  console.log('  ✓ Mock test routes loaded');
+  app.use('/chatbot', chatbotRoutes);
+  console.log('  ✓ Chatbot routes loaded');
+} catch (err) {
+  console.error('❌ Error loading routes:', err);
+  throw err;
+}
 
 // Root test route
 app.get('/', (req, res) => {

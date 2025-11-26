@@ -6,6 +6,10 @@ const router = express.Router();
 
 // Initialize OpenAI client lazily (only when needed)
 function getOpenAIClient() {
+  if (!OpenAI) {
+    throw new Error('OpenAI package is not available. Please install it: npm install openai');
+  }
+  
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set in environment variables');
   }
