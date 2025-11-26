@@ -23,10 +23,6 @@ dotenv.config();
 
 const app = express();
 
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
 // Simple health check (doesn't require database) - Railway needs this
 // MUST be registered BEFORE other middleware to ensure it's always accessible
 app.get('/health', (req, res) => {
