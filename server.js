@@ -96,7 +96,17 @@ app.get('/health', async (req, res) => {
   }
 });
 
+//--------------------------------------------------
+//  REQUIRED FOR RAILWAY (THIS IS THE FIX)
+//--------------------------------------------------
 const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🔥 SERVER RUNNING on port ${PORT}`);
+  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
+  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
+  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+});
 
 // Start server with error handling
 try {
