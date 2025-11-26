@@ -1,3 +1,12 @@
+// ------------------------
+// ENVIRONMENT CONFIG
+// ------------------------
+import dotenv from "dotenv";
+if (process.env.RAILWAY_STATIC_URL == null) { 
+  // Running locally → use .env
+  dotenv.config(); 
+}
+
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -98,14 +107,9 @@ app.get('/health', async (req, res) => {
 });
 
 
-
-// ========== FINAL WORKING RAILWAY LISTEN BLOCK ========== //
-
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🔥 SERVER RUNNING on port ${PORT}`);
-  console.log(`📍 Test endpoint: http://localhost:${PORT}/`);
-  console.log(`📍 Auth ping: http://localhost:${PORT}/auth/ping`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
+  console.log(`🔥 Server bound to port: ${PORT}`);
+  console.log(`📍 Health: http://0.0.0.0:${PORT}/health`);
 });
