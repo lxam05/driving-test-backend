@@ -3,121 +3,64 @@ import bcrypt from 'bcrypt';
 import pool from '../db.js';
 import jwt from "jsonwebtoken";
 
-
 const router = express.Router();
 
-// Debug route to confirm router works
+// Debug route
 router.get('/ping', (req, res) => {
   console.log("🔥 AUTH PING HIT");
   res.json({ message: 'auth router working' });
 });
 
-// Signup route
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: "Email and password required" });
-
-    // TODO: Look up user in DB
-    // const user = await pool.query(...);
-
-    // TODO: Validate password
-    // const valid = await bcrypt.compare(password, user.password);
-    // if (!valid) return res.status(401).json({ error: "Invalid credentials" });
-
-    return res.json({ message: "Logged in successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Login route
+// LOGIN ROUTE (only one!)
 router.post('/login', async (req, res) => {
   console.log("🔥 LOGIN ROUTE HIT");
 
   try {
     const { email, password } = req.body;
 
-    // 1. Missing fields
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required." });
-    }
+    if (!email || !password)
+      return res.status(400).json({ error: "Email and password required" });
 
-    // 2. Find user by email
     const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email]
+      "SELECT * FROM users WHERE email = $1", [email]
     );
 
-    if (result.rows.length === 0) {
+    if (result.rows.length === 0)
       return res.status(400).json({ error: "Invalid email or password." });
-    }
 
     const user = result.rows[0];
 
-    // 3. Check password
     const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.status(400).json({ error: "Invalid email or password." });
-    }
+    if (!match) return res.status(400).json({ error: "Invalid email or password." });
 
-    // 4. Create JWT token
-    if (!process.env.JWT_SECRET) {
-      console.error("⚠️ JWT_SECRET not set in environment variables");
-      return res.status(500).json({ error: "Server configuration error." });
-    }
+    if (!process.env.JWT_SECRET)
+      return res.status(500).json({ error: "Server config error" });
 
     const token = jwt.sign(
-      {
-        user_id: user.id,  // Changed from user.user_id to user.id
-        email: user.email,
-        username: user.username
-      },
+      { user_id: user.id, email: user.email, username: user.username },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" }
     );
-    
 
-    // 5. Send it back
-    return res.json({
+    res.json({
       message: "Login successful",
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username
-      }
+      user: { id: user.id, email: user.email, username: user.username }
     });
 
   } catch (err) {
     console.error("🔥 LOGIN ERROR:", err);
-    
-    // Provide more specific error messages
-    if (err.code === '42P01') { // Table doesn't exist
-      return res.status(500).json({ error: "Database table not found. Please create the 'users' table." });
-    }
-    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-      return res.status(500).json({ error: "Database connection failed. Check your DATABASE_URL." });
-    }
-    
-    return res.status(500).json({ error: "Server error", details: err.message });
+    res.status(500).json({ error: "Server error", details: err.message });
   }
 });
 
-// Test database connection
+// DB test route
 router.get('/test-db', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
-    res.json({ 
-      message: 'Database connection successful',
-      timestamp: result.rows[0].now 
-    });
+    res.json({ message: 'Database OK', timestamp: result.rows[0].now });
   } catch (err) {
-    res.status(500).json({ 
-      error: 'Database connection failed',
-      details: err.message 
-    });
+    res.status(500).json({ error: 'Database connection failed', details: err.message });
   }
 });
 
