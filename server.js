@@ -1,4 +1,5 @@
-import 'dotenv/config';      // <- REQUIRED FIRST LINE
+import dotenv from "dotenv";
+dotenv.config({ path: "/Users/liam/Downloads/UCD/DrivingTestApp/my-backend/.env" });
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
