@@ -1,1 +1,1 @@
-web: node --env-file=.env server.js
+web: npm start
