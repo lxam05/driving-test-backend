@@ -1,5 +1,12 @@
 import dotenv from "dotenv";
-dotenv.config({ path: "/Users/liam/Downloads/UCD/DrivingTestApp/my-backend/.env" });
+dotenv.config({ path: ".env" });   // <- Explicit load
+
+import express from "express";
+import cors from "cors";
+import authRoutes from "./routes/auth.js";
+import chatbotRoutes from "./routes/chatbot.js";
+import db from "./db.js";
+
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
