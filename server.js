@@ -7,12 +7,6 @@ import authRoutes from "./routes/auth.js";
 import chatbotRoutes from "./routes/chatbot.js";
 import db from "./db.js";
 
-import express from "express";
-import cors from "cors";
-import authRoutes from "./routes/auth.js";
-import chatbotRoutes from "./routes/chatbot.js";
-import db from "./db.js"
-
 const app = express();
 
 /* ================================
