@@ -20,6 +20,67 @@ function verifyToken(req, res, next) {
   });
 }
 
+// SIGNUP ROUTE
+router.post("/signup", async (req, res) => {
+  console.log("🔥 SIGNUP ROUTE HIT");
+
+  try {
+    const { email, username, password } = req.body;
+
+    // Basic validation
+    if (!email || !username || !password) {
+      return res.status(400).json({ error: "Email, username and password are required" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    }
+
+    // Check if email already exists
+    const existingByEmail = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [email]
+    );
+    if (existingByEmail.rows.length > 0) {
+      return res.status(400).json({ error: "Email is already registered" });
+    }
+
+    // Check if username already exists
+    const existingByUsername = await pool.query(
+      "SELECT id FROM users WHERE username = $1",
+      [username]
+    );
+    if (existingByUsername.rows.length > 0) {
+      return res.status(400).json({ error: "Username is already taken" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert new user
+    const insertResult = await pool.query(
+      "INSERT INTO users (email, username, password) VALUES ($1, $2, $3) RETURNING id, email, username",
+      [email, username, hashedPassword]
+    );
+
+    const newUser = insertResult.rows[0];
+
+    console.log("✅ New user created:", newUser.id);
+
+    // For now we just confirm creation (frontend redirects to login)
+    return res.status(201).json({
+      message: "Account created successfully",
+      user: newUser,
+    });
+  } catch (err) {
+    console.error("🔥 SIGNUP ERROR:", err);
+    return res.status(500).json({
+      error: "Server error while creating account",
+      details: err.message,
+    });
+  }
+});
+
 
 // Debug route
 router.get('/ping', (req, res) => {
