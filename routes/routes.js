@@ -91,14 +91,30 @@ router.post('/checkout', authMiddleware, async (req, res) => {
       });
     }
 
-    // Validate success/cancel URLs
-    const successUrl = process.env.STRIPE_SUCCESS_URL || 'http://localhost:5500';
-    const cancelUrl = process.env.STRIPE_CANCEL_URL || 'http://localhost:5500';
+    // Validate and format success/cancel URLs
+    let successUrl = process.env.STRIPE_SUCCESS_URL || 'http://localhost:5500';
+    let cancelUrl = process.env.STRIPE_CANCEL_URL || 'http://localhost:5500';
+
+    // Ensure URLs have https:// scheme
+    if (!successUrl.startsWith('http://') && !successUrl.startsWith('https://')) {
+      successUrl = `https://${successUrl}`;
+    }
+    if (!cancelUrl.startsWith('http://') && !cancelUrl.startsWith('https://')) {
+      cancelUrl = `https://${cancelUrl}`;
+    }
+
+    // Remove trailing slashes and ensure clean URL
+    successUrl = successUrl.replace(/\/$/, '');
+    cancelUrl = cancelUrl.replace(/\/$/, '');
+
+    // Build final URLs
+    const finalSuccessUrl = `${successUrl}/routes.html?payment=success`;
+    const finalCancelUrl = `${cancelUrl}/routes.html?payment=cancelled`;
 
     console.log('Creating Stripe checkout session for user:', userId);
     console.log('Price:', price, 'cents (€' + (price / 100).toFixed(2) + ')');
-    console.log('Success URL:', successUrl);
-    console.log('Cancel URL:', cancelUrl);
+    console.log('Success URL:', finalSuccessUrl);
+    console.log('Cancel URL:', finalCancelUrl);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -116,8 +132,8 @@ router.post('/checkout', authMiddleware, async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `${successUrl}/routes.html?payment=success`,
-      cancel_url: `${cancelUrl}/routes.html?payment=cancelled`,
+      success_url: finalSuccessUrl,
+      cancel_url: finalCancelUrl,
       client_reference_id: userId.toString(),
       metadata: {
         user_id: userId.toString(),
