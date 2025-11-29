@@ -67,8 +67,17 @@ async function hasActiveLicense(userId) {
   }
 }
 
-// POST /routes/checkout - Create Stripe Checkout Session
-router.post('/checkout', authMiddleware, async (req, res) => {
+// GET /routes/publishable-key - Get Stripe publishable key
+router.get('/publishable-key', (req, res) => {
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  if (!publishableKey) {
+    return res.status(500).json({ error: 'Stripe publishable key not configured' });
+  }
+  res.json({ publishableKey });
+});
+
+// POST /routes/create-payment-intent - Create PaymentIntent for onsite payment
+router.post('/create-payment-intent', authMiddleware, async (req, res) => {
   try {
     // Check if Stripe is initialized
     if (!stripe) {
@@ -91,59 +100,29 @@ router.post('/checkout', authMiddleware, async (req, res) => {
       });
     }
 
-    // Validate and format success/cancel URLs
-    let successUrl = process.env.STRIPE_SUCCESS_URL || 'http://localhost:5500';
-    let cancelUrl = process.env.STRIPE_CANCEL_URL || 'http://localhost:5500';
-
-    // Ensure URLs have https:// scheme
-    if (!successUrl.startsWith('http://') && !successUrl.startsWith('https://')) {
-      successUrl = `https://${successUrl}`;
-    }
-    if (!cancelUrl.startsWith('http://') && !cancelUrl.startsWith('https://')) {
-      cancelUrl = `https://${cancelUrl}`;
-    }
-
-    // Remove trailing slashes and ensure clean URL
-    successUrl = successUrl.replace(/\/$/, '');
-    cancelUrl = cancelUrl.replace(/\/$/, '');
-
-    // Build final URLs
-    const finalSuccessUrl = `${successUrl}/routes.html?payment=success`;
-    const finalCancelUrl = `${cancelUrl}/routes.html?payment=cancelled`;
-
-    console.log('Creating Stripe checkout session for user:', userId);
+    console.log('Creating PaymentIntent for user:', userId);
     console.log('Price:', price, 'cents (€' + (price / 100).toFixed(2) + ')');
-    console.log('Success URL:', finalSuccessUrl);
-    console.log('Cancel URL:', finalCancelUrl);
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: '3-Month Route Access License',
-              description: 'Access to all driving test routes for 3 months',
-            },
-            unit_amount: price,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: finalSuccessUrl,
-      cancel_url: finalCancelUrl,
-      client_reference_id: userId.toString(),
+    // Create PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: price,
+      currency: 'eur',
       metadata: {
         user_id: userId.toString(),
+        product: '3-Month Route Access License',
+      },
+      automatic_payment_methods: {
+        enabled: true,
       },
     });
 
-    console.log('Stripe session created:', session.id);
-    res.json({ sessionId: session.id, url: session.url });
+    console.log('PaymentIntent created:', paymentIntent.id);
+    res.json({ 
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
   } catch (err) {
-    console.error('Stripe checkout error:', err);
+    console.error('Stripe PaymentIntent error:', err);
     console.error('Error details:', {
       message: err.message,
       type: err.type,
@@ -151,8 +130,70 @@ router.post('/checkout', authMiddleware, async (req, res) => {
       statusCode: err.statusCode
     });
     res.status(500).json({ 
-      error: 'Failed to create checkout session',
+      error: 'Failed to create payment intent',
       details: err.message || 'Unknown error'
+    });
+  }
+});
+
+// POST /routes/confirm-payment - Confirm payment and create license
+router.post('/confirm-payment', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: 'Payment intent ID required' });
+    }
+
+    // Verify payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    // Check if payment belongs to this user
+    if (paymentIntent.metadata.user_id !== userId.toString()) {
+      return res.status(403).json({ error: 'Payment does not belong to this user' });
+    }
+
+    // Check if payment succeeded
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ 
+        error: 'Payment not completed',
+        status: paymentIntent.status
+      });
+    }
+
+    // Check if license already exists for this payment
+    const existingLicense = await pool.query(
+      'SELECT id FROM route_licenses WHERE stripe_payment_intent_id = $1',
+      [paymentIntentId]
+    );
+
+    if (existingLicense.rows.length > 0) {
+      return res.status(400).json({ error: 'License already created for this payment' });
+    }
+
+    // Create license
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + 3);
+
+    await pool.query(
+      `INSERT INTO route_licenses 
+       (user_id, stripe_payment_intent_id, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, paymentIntentId, expiresAt]
+    );
+
+    console.log(`License created for user ${userId} from payment ${paymentIntentId}`);
+    res.json({ 
+      success: true,
+      message: 'License activated successfully',
+      expiresAt: expiresAt.toISOString()
+    });
+  } catch (err) {
+    console.error('Error confirming payment:', err);
+    res.status(500).json({ 
+      error: 'Failed to confirm payment',
+      details: err.message
     });
   }
 });
@@ -338,7 +379,48 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the checkout.session.completed event
+  // Handle payment_intent.succeeded event (for PaymentIntent flow)
+  if (event.type === 'payment_intent.succeeded') {
+    const paymentIntent = event.data.object;
+    const userId = paymentIntent.metadata.user_id;
+
+    if (!userId) {
+      console.error('No user_id in payment intent metadata');
+      return res.status(400).json({ error: 'No user_id in payment intent' });
+    }
+
+    try {
+      // Check if license already exists for this payment
+      const existingLicense = await pool.query(
+        'SELECT id FROM route_licenses WHERE stripe_payment_intent_id = $1',
+        [paymentIntent.id]
+      );
+
+      if (existingLicense.rows.length > 0) {
+        console.log(`License already exists for payment ${paymentIntent.id}`);
+        return res.json({ received: true, message: 'License already exists' });
+      }
+
+      // Calculate expiry (3 months from now)
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + 3);
+
+      // Create license record
+      await pool.query(
+        `INSERT INTO route_licenses 
+         (user_id, stripe_payment_intent_id, expires_at)
+         VALUES ($1, $2, $3)`,
+        [userId, paymentIntent.id, expiresAt]
+      );
+
+      console.log(`License created for user ${userId} from webhook`);
+    } catch (err) {
+      console.error('Error creating license from webhook:', err);
+      return res.status(500).json({ error: 'Failed to create license' });
+    }
+  }
+
+  // Also handle checkout.session.completed for backwards compatibility
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const userId = session.client_reference_id; // UUID, not integer
