@@ -101,7 +101,15 @@ router.get('/publishable-key', (req, res) => {
     const publishableKeyType = trimmedKey.startsWith('pk_test_') ? 'test' : 'live';
     
     if (secretKeyType !== publishableKeyType) {
-      console.warn(`⚠️ Key mismatch: Secret key is ${secretKeyType} but publishable key is ${publishableKeyType}`);
+      console.error(`❌ CRITICAL: Key mismatch detected!`);
+      console.error(`   Secret key is ${secretKeyType.toUpperCase()} (${process.env.STRIPE_SECRET_KEY?.substring(0, 10)}...)`);
+      console.error(`   Publishable key is ${publishableKeyType.toUpperCase()} (${trimmedKey.substring(0, 10)}...)`);
+      console.error(`   Both keys must be from the same environment (both test or both live)`);
+      return res.status(500).json({ 
+        error: 'Stripe key mismatch',
+        details: `Secret key is ${secretKeyType} but publishable key is ${publishableKeyType}. Both keys must be from the same environment.`,
+        fix: 'Update your Railway environment variables to use matching keys (both test or both live)'
+      });
     }
     
     res.json({ publishableKey: trimmedKey });
