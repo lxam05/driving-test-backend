@@ -42,6 +42,17 @@ async function getLinkExpiryHours() {
 // Check if user has active license
 async function hasActiveLicense(userId) {
   try {
+    // Permanent access for admin users (set via ADMIN_USER_IDS env var, comma-separated)
+    const adminUserIds = process.env.ADMIN_USER_IDS?.split(',').map(id => id.trim()) || [];
+    if (adminUserIds.includes(userId.toString())) {
+      console.log('✅ Admin user detected - granting permanent access:', userId);
+      // Return a "permanent" license object (expires far in the future)
+      return {
+        expires_at: new Date('2099-12-31T23:59:59Z'),
+        is_permanent: true
+      };
+    }
+    
     // Try with is_active first, fallback to just checking expiry if column doesn't exist
     let result;
     try {
@@ -270,6 +281,7 @@ router.get('/license-status', authMiddleware, async (req, res) => {
     res.json({
       hasLicense: !!license,
       expiresAt: license?.expires_at || null,
+      isPermanent: license?.is_permanent || false,
     });
   } catch (err) {
     console.error('Error checking license status:', err);
