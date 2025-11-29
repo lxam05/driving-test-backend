@@ -6,6 +6,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import chatbotRoutes from "./routes/chatbot.js";
 import mockTestRoutes from "./routes/mockTests.js";
+import routesRoutes from "./routes/routes.js";
 import db from "./db.js";
 
 const app = express();
@@ -49,6 +50,7 @@ db.query("SELECT 1")
 app.use("/auth", authRoutes);
 app.use("/chatbot", chatbotRoutes);
 app.use("/mock-tests", mockTestRoutes);
+app.use("/routes", routesRoutes);
 
 /* ================================
    🔥 SERVER LISTEN
