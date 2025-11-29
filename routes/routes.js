@@ -12,8 +12,13 @@ try {
   if (!process.env.STRIPE_SECRET_KEY) {
     console.error('⚠️ STRIPE_SECRET_KEY not set in environment variables');
   } else {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
+    const secretKey = process.env.STRIPE_SECRET_KEY.trim();
+    const keyType = secretKey.startsWith('sk_test_') ? 'TEST' : 
+                   secretKey.startsWith('sk_live_') ? 'LIVE' : 'UNKNOWN';
+    console.log(`🔑 Stripe Secret Key Type: ${keyType}`);
+    
+    stripe = new Stripe(secretKey, {
+      apiVersion: '2024-11-20.acacia',
     });
     console.log('✅ Stripe initialized successfully');
   }
@@ -82,15 +87,24 @@ router.get('/publishable-key', (req, res) => {
     }
     
     // Validate key format
-    if (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_')) {
-      console.error('Invalid publishable key format:', publishableKey.substring(0, 10) + '...');
+    const trimmedKey = publishableKey.trim();
+    if (!trimmedKey.startsWith('pk_test_') && !trimmedKey.startsWith('pk_live_')) {
+      console.error('Invalid publishable key format:', trimmedKey.substring(0, 10) + '...');
       return res.status(500).json({ 
         error: 'Invalid Stripe publishable key format',
         details: 'Key must start with pk_test_ or pk_live_'
       });
     }
     
-    res.json({ publishableKey });
+    // Check for key mismatch
+    const secretKeyType = process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') ? 'test' : 'live';
+    const publishableKeyType = trimmedKey.startsWith('pk_test_') ? 'test' : 'live';
+    
+    if (secretKeyType !== publishableKeyType) {
+      console.warn(`⚠️ Key mismatch: Secret key is ${secretKeyType} but publishable key is ${publishableKeyType}`);
+    }
+    
+    res.json({ publishableKey: trimmedKey });
   } catch (err) {
     console.error('Error in publishable-key endpoint:', err);
     res.status(500).json({ 
@@ -138,9 +152,26 @@ router.post('/create-payment-intent', authMiddleware, async (req, res) => {
       automatic_payment_methods: {
         enabled: true,
       },
+      description: '3-Month Route Access License',
     });
 
     console.log('PaymentIntent created:', paymentIntent.id);
+    console.log('PaymentIntent status:', paymentIntent.status);
+    console.log('Client secret exists:', !!paymentIntent.client_secret);
+    console.log('PaymentIntent amount:', paymentIntent.amount);
+    console.log('PaymentIntent currency:', paymentIntent.currency);
+    
+    if (!paymentIntent.client_secret) {
+      console.error('PaymentIntent details:', JSON.stringify(paymentIntent, null, 2));
+      throw new Error('PaymentIntent created but no client_secret returned');
+    }
+
+    // Verify client_secret format
+    if (!paymentIntent.client_secret.includes('_secret_')) {
+      console.error('Invalid client_secret format:', paymentIntent.client_secret.substring(0, 20) + '...');
+      throw new Error('Invalid client_secret format returned from Stripe');
+    }
+
     res.json({ 
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id
