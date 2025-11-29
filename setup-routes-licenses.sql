@@ -4,7 +4,7 @@
 -- Table for storing user route licenses (3-month access)
 CREATE TABLE IF NOT EXISTS route_licenses (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   stripe_payment_intent_id VARCHAR(255) UNIQUE,
   stripe_checkout_session_id VARCHAR(255) UNIQUE,
   purchased_at TIMESTAMP DEFAULT NOW(),
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS route_licenses (
 -- Table for storing time-limited route links
 CREATE TABLE IF NOT EXISTS route_links (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   centre_name VARCHAR(255) NOT NULL,
   route_number INTEGER NOT NULL,
   link_token VARCHAR(255) UNIQUE NOT NULL,

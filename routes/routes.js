@@ -7,9 +7,19 @@ import { randomUUID } from 'crypto';
 const router = express.Router();
 
 // Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia',
-});
+let stripe;
+try {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error('⚠️ STRIPE_SECRET_KEY not set in environment variables');
+  } else {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2024-12-18.acacia',
+    });
+    console.log('✅ Stripe initialized successfully');
+  }
+} catch (err) {
+  console.error('❌ Failed to initialize Stripe:', err.message);
+}
 
 // Get link expiry hours from settings (default 12)
 async function getLinkExpiryHours() {
@@ -27,12 +37,29 @@ async function getLinkExpiryHours() {
 // Check if user has active license
 async function hasActiveLicense(userId) {
   try {
-    const result = await pool.query(
-      `SELECT expires_at FROM route_licenses 
-       WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
-       ORDER BY expires_at DESC LIMIT 1`,
-      [userId]
-    );
+    // Try with is_active first, fallback to just checking expiry if column doesn't exist
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT expires_at FROM route_licenses 
+         WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
+         ORDER BY expires_at DESC LIMIT 1`,
+        [userId]
+      );
+    } catch (err) {
+      // If is_active column doesn't exist, try without it
+      if (err.message && err.message.includes('is_active')) {
+        console.warn('is_active column not found, checking without it');
+        result = await pool.query(
+          `SELECT expires_at FROM route_licenses 
+           WHERE user_id = $1 AND expires_at > NOW()
+           ORDER BY expires_at DESC LIMIT 1`,
+          [userId]
+        );
+      } else {
+        throw err;
+      }
+    }
     return result.rows[0] || null;
   } catch (err) {
     console.error('Error checking license:', err);
@@ -43,6 +70,15 @@ async function hasActiveLicense(userId) {
 // POST /routes/checkout - Create Stripe Checkout Session
 router.post('/checkout', authMiddleware, async (req, res) => {
   try {
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe not initialized - STRIPE_SECRET_KEY missing or invalid');
+      return res.status(500).json({ 
+        error: 'Payment system not configured. Please contact support.',
+        details: 'Stripe secret key not set'
+      });
+    }
+
     const userId = req.user.user_id;
     const price = parseInt(process.env.ROUTES_LICENSE_PRICE || '2999'); // default €29.99
 
@@ -54,6 +90,15 @@ router.post('/checkout', authMiddleware, async (req, res) => {
         expiresAt: existingLicense.expires_at
       });
     }
+
+    // Validate success/cancel URLs
+    const successUrl = process.env.STRIPE_SUCCESS_URL || 'http://localhost:5500';
+    const cancelUrl = process.env.STRIPE_CANCEL_URL || 'http://localhost:5500';
+
+    console.log('Creating Stripe checkout session for user:', userId);
+    console.log('Price:', price, 'cents (€' + (price / 100).toFixed(2) + ')');
+    console.log('Success URL:', successUrl);
+    console.log('Cancel URL:', cancelUrl);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -71,18 +116,28 @@ router.post('/checkout', authMiddleware, async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.STRIPE_SUCCESS_URL || 'http://localhost:5500'}/routes.html?payment=success`,
-      cancel_url: `${process.env.STRIPE_CANCEL_URL || 'http://localhost:5500'}/routes.html?payment=cancelled`,
+      success_url: `${successUrl}/routes.html?payment=success`,
+      cancel_url: `${cancelUrl}/routes.html?payment=cancelled`,
       client_reference_id: userId.toString(),
       metadata: {
         user_id: userId.toString(),
       },
     });
 
+    console.log('Stripe session created:', session.id);
     res.json({ sessionId: session.id, url: session.url });
   } catch (err) {
     console.error('Stripe checkout error:', err);
-    res.status(500).json({ error: 'Failed to create checkout session' });
+    console.error('Error details:', {
+      message: err.message,
+      type: err.type,
+      code: err.code,
+      statusCode: err.statusCode
+    });
+    res.status(500).json({ 
+      error: 'Failed to create checkout session',
+      details: err.message || 'Unknown error'
+    });
   }
 });
 
@@ -270,7 +325,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Handle the checkout.session.completed event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    const userId = parseInt(session.client_reference_id);
+    const userId = session.client_reference_id; // UUID, not integer
 
     if (!userId) {
       console.error('No user_id in session');
