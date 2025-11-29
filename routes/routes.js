@@ -69,11 +69,35 @@ async function hasActiveLicense(userId) {
 
 // GET /routes/publishable-key - Get Stripe publishable key
 router.get('/publishable-key', (req, res) => {
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
-  if (!publishableKey) {
-    return res.status(500).json({ error: 'Stripe publishable key not configured' });
+  try {
+    const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+    console.log('Publishable key check:', publishableKey ? 'Key exists' : 'Key missing');
+    
+    if (!publishableKey) {
+      console.error('STRIPE_PUBLISHABLE_KEY not set in environment variables');
+      return res.status(500).json({ 
+        error: 'Stripe publishable key not configured',
+        details: 'STRIPE_PUBLISHABLE_KEY environment variable is missing'
+      });
+    }
+    
+    // Validate key format
+    if (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_')) {
+      console.error('Invalid publishable key format:', publishableKey.substring(0, 10) + '...');
+      return res.status(500).json({ 
+        error: 'Invalid Stripe publishable key format',
+        details: 'Key must start with pk_test_ or pk_live_'
+      });
+    }
+    
+    res.json({ publishableKey });
+  } catch (err) {
+    console.error('Error in publishable-key endpoint:', err);
+    res.status(500).json({ 
+      error: 'Failed to get publishable key',
+      details: err.message
+    });
   }
-  res.json({ publishableKey });
 });
 
 // POST /routes/create-payment-intent - Create PaymentIntent for onsite payment
