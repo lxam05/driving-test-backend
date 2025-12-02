@@ -650,9 +650,9 @@ router.get('/naas-data/:token', authMiddleware, async (req, res) => {
 });
 
 // GET /routes/naas-route/:token/:routeId - Proxy endpoint that redirects to actual Google Maps link
-router.get('/naas-route/:token/:routeId', authMiddleware, async (req, res) => {
+// Note: No authMiddleware needed - access token in URL is sufficient security
+router.get('/naas-route/:token/:routeId', async (req, res) => {
   try {
-    const userId = req.user.user_id;
     const { token, routeId } = req.params;
 
     // Validate token
@@ -668,11 +668,6 @@ router.get('/naas-route/:token/:routeId', authMiddleware, async (req, res) => {
     }
 
     const tokenData = tokenResult.rows[0];
-
-    // Check if token belongs to this user
-    if (tokenData.user_id !== userId) {
-      return res.status(403).json({ error: 'Token does not belong to this user' });
-    }
 
     // Check if expired
     if (new Date(tokenData.expires_at) < new Date()) {
