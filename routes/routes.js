@@ -3,6 +3,12 @@ import Stripe from 'stripe';
 import pool from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const router = express.Router();
 
@@ -536,6 +542,165 @@ router.get('/settings', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Error getting settings:', err);
     res.status(500).json({ error: 'Failed to get settings' });
+  }
+});
+
+// POST /routes/generate-naas-token - Generate 30-minute access token for Naas routes
+router.post('/generate-naas-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+
+    // Check for active license
+    const license = await hasActiveLicense(userId);
+    if (!license) {
+      return res.status(403).json({ error: 'No active license. Please purchase access.' });
+    }
+
+    // Generate unique token
+    const accessToken = randomUUID();
+
+    // Set expiry to 30 minutes from now
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+
+    // Create token record
+    await pool.query(
+      `INSERT INTO naas_access_tokens (user_id, access_token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, accessToken, expiresAt]
+    );
+
+    console.log(`Naas access token generated for user ${userId}, expires at ${expiresAt.toISOString()}`);
+
+    res.json({
+      accessToken,
+      expiresAt: expiresAt.toISOString(),
+    });
+  } catch (err) {
+    console.error('Error generating Naas token:', err);
+    res.status(500).json({ error: 'Failed to generate access token' });
+  }
+});
+
+// GET /routes/naas-data/:token - Get Naas route data (without actual links)
+router.get('/naas-data/:token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { token } = req.params;
+
+    // Validate token
+    const result = await pool.query(
+      `SELECT user_id, expires_at, is_used
+       FROM naas_access_tokens
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid access token' });
+    }
+
+    const tokenData = result.rows[0];
+
+    // Check if token belongs to this user
+    if (tokenData.user_id !== userId) {
+      return res.status(403).json({ error: 'Token does not belong to this user' });
+    }
+
+    // Check if expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'Access token has expired' });
+    }
+
+    // Load naas.json file
+    let naasData;
+    try {
+      const filePath = join(__dirname, '../data/naas.json');
+      const fileContent = readFileSync(filePath, 'utf-8');
+      naasData = JSON.parse(fileContent);
+    } catch (err) {
+      console.error('Error reading naas.json:', err);
+      return res.status(500).json({ error: 'Failed to load route data' });
+    }
+
+    // Return data without actual links - replace with proxy endpoints
+    const routesWithoutLinks = naasData.routes.map(route => ({
+      id: route.id,
+      name: route.name,
+      // Don't include the actual link - frontend will use proxy endpoint
+    }));
+
+    // Update last accessed
+    await pool.query(
+      `UPDATE naas_access_tokens 
+       SET last_accessed_at = NOW(), is_used = true
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    res.json({
+      location: naasData.location,
+      routes: routesWithoutLinks,
+      expiresAt: tokenData.expires_at,
+    });
+  } catch (err) {
+    console.error('Error getting Naas data:', err);
+    res.status(500).json({ error: 'Failed to get route data' });
+  }
+});
+
+// GET /routes/naas-route/:token/:routeId - Proxy endpoint that redirects to actual Google Maps link
+router.get('/naas-route/:token/:routeId', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { token, routeId } = req.params;
+
+    // Validate token
+    const tokenResult = await pool.query(
+      `SELECT user_id, expires_at
+       FROM naas_access_tokens
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid access token' });
+    }
+
+    const tokenData = tokenResult.rows[0];
+
+    // Check if token belongs to this user
+    if (tokenData.user_id !== userId) {
+      return res.status(403).json({ error: 'Token does not belong to this user' });
+    }
+
+    // Check if expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'Access token has expired' });
+    }
+
+    // Load naas.json file
+    let naasData;
+    try {
+      const filePath = join(__dirname, '../data/naas.json');
+      const fileContent = readFileSync(filePath, 'utf-8');
+      naasData = JSON.parse(fileContent);
+    } catch (err) {
+      console.error('Error reading naas.json:', err);
+      return res.status(500).json({ error: 'Failed to load route data' });
+    }
+
+    // Find the route
+    const route = naasData.routes.find(r => r.id === parseInt(routeId));
+    if (!route) {
+      return res.status(404).json({ error: 'Route not found' });
+    }
+
+    // Redirect directly to Google Maps - link never exposed in frontend
+    res.redirect(302, route.link);
+  } catch (err) {
+    console.error('Error accessing Naas route:', err);
+    res.status(500).json({ error: 'Failed to access route' });
   }
 });
 
