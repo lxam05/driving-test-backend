@@ -649,6 +649,158 @@ router.get('/naas-data/:token', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /routes/generate-tallaght-token - Generate 30-minute access token for Tallaght routes
+router.post('/generate-tallaght-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+
+    // Check for active license
+    const license = await hasActiveLicense(userId);
+    if (!license) {
+      return res.status(403).json({ error: 'No active license. Please purchase access.' });
+    }
+
+    // Generate unique token
+    const accessToken = randomUUID();
+
+    // Set expiry to 30 minutes from now
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+
+    // Create token record (reuse naas_access_tokens table for simplicity)
+    await pool.query(
+      `INSERT INTO naas_access_tokens (user_id, access_token, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, accessToken, expiresAt]
+    );
+
+    console.log(`Tallaght access token generated for user ${userId}, expires at ${expiresAt.toISOString()}`);
+
+    res.json({
+      accessToken,
+      expiresAt: expiresAt.toISOString(),
+    });
+  } catch (err) {
+    console.error('Error generating Tallaght token:', err);
+    res.status(500).json({ error: 'Failed to generate access token' });
+  }
+});
+
+// GET /routes/tallaght-data/:token - Get Tallaght route data (without actual links)
+router.get('/tallaght-data/:token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { token } = req.params;
+
+    // Validate token
+    const result = await pool.query(
+      `SELECT user_id, expires_at, is_used
+       FROM naas_access_tokens
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid access token' });
+    }
+
+    const tokenData = result.rows[0];
+
+    // Check if token belongs to this user
+    if (tokenData.user_id !== userId) {
+      return res.status(403).json({ error: 'Token does not belong to this user' });
+    }
+
+    // Check if expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'Access token has expired' });
+    }
+
+    // Load tallaght.json file
+    let tallaghtData;
+    try {
+      const filePath = join(__dirname, '../data/tallaght.json');
+      const fileContent = readFileSync(filePath, 'utf-8');
+      tallaghtData = JSON.parse(fileContent);
+    } catch (err) {
+      console.error('Error reading tallaght.json:', err);
+      return res.status(500).json({ error: 'Failed to load route data' });
+    }
+
+    // Return data without actual links
+    const routesWithoutLinks = tallaghtData.routes.map(route => ({
+      id: route.id,
+      name: route.name,
+    }));
+
+    // Update last accessed
+    await pool.query(
+      `UPDATE naas_access_tokens 
+       SET last_accessed_at = NOW(), is_used = true
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    res.json({
+      location: tallaghtData.location,
+      routes: routesWithoutLinks,
+      expiresAt: tokenData.expires_at,
+    });
+  } catch (err) {
+    console.error('Error getting Tallaght data:', err);
+    res.status(500).json({ error: 'Failed to get route data' });
+  }
+});
+
+// GET /routes/tallaght-route/:token/:routeId - Proxy endpoint that redirects to actual Google Maps link
+router.get('/tallaght-route/:token/:routeId', async (req, res) => {
+  try {
+    const { token, routeId } = req.params;
+
+    // Validate token
+    const tokenResult = await pool.query(
+      `SELECT user_id, expires_at
+       FROM naas_access_tokens
+       WHERE access_token = $1`,
+      [token]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid access token' });
+    }
+
+    const tokenData = tokenResult.rows[0];
+
+    // Check if expired
+    if (new Date(tokenData.expires_at) < new Date()) {
+      return res.status(403).json({ error: 'Access token has expired' });
+    }
+
+    // Load tallaght.json file
+    let tallaghtData;
+    try {
+      const filePath = join(__dirname, '../data/tallaght.json');
+      const fileContent = readFileSync(filePath, 'utf-8');
+      tallaghtData = JSON.parse(fileContent);
+    } catch (err) {
+      console.error('Error reading tallaght.json:', err);
+      return res.status(500).json({ error: 'Failed to load route data' });
+    }
+
+    // Find the route
+    const route = tallaghtData.routes.find(r => r.id === parseInt(routeId));
+    if (!route) {
+      return res.status(404).json({ error: 'Route not found' });
+    }
+
+    // Redirect directly to Google Maps - link never exposed in frontend
+    res.redirect(302, route.link);
+  } catch (err) {
+    console.error('Error accessing Tallaght route:', err);
+    res.status(500).json({ error: 'Failed to access route' });
+  }
+});
+
 // GET /routes/naas-route/:token/:routeId - Proxy endpoint that redirects to actual Google Maps link
 // Note: No authMiddleware needed - access token in URL is sufficient security
 router.get('/naas-route/:token/:routeId', async (req, res) => {
