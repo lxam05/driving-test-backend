@@ -152,7 +152,7 @@ router.post('/create-payment-intent', authMiddleware, async (req, res) => {
     }
 
     const userId = req.user.user_id;
-    const price = parseInt(process.env.ROUTES_LICENSE_PRICE || '2999'); // default €29.99
+    const price = parseInt(process.env.ROUTES_LICENSE_PRICE || '1399'); // default €13.99
 
     // Check if user already has active license
     const existingLicense = await hasActiveLicense(userId);
