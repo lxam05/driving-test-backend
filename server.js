@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.js";
 import chatbotRoutes from "./routes/chatbot.js";
 import mockTestRoutes from "./routes/mockTests.js";
 import routesRoutes from "./routes/routes.js";
+import contactRoutes from "./routes/contact.js";
 import db from "./db.js";
 
 const app = express();
@@ -51,6 +52,7 @@ app.use("/auth", authRoutes);
 app.use("/chatbot", chatbotRoutes);
 app.use("/mock-tests", mockTestRoutes);
 app.use("/routes", routesRoutes);
+app.use("/contact", contactRoutes);
 
 /* ================================
    🔥 SERVER LISTEN
