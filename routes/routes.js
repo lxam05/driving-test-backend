@@ -152,38 +152,19 @@ router.post('/create-payment-intent', authMiddleware, async (req, res) => {
     }
 
     const userId = req.user.user_id;
-    
-    // Support custom amount (for single route vs bundle)
-    // amount in cents: 299 for single route, 1399 for full bundle
-    const requestedAmount = req.body.amount ? parseInt(req.body.amount) : null;
-    const price = requestedAmount || parseInt(process.env.ROUTES_LICENSE_PRICE || '1399'); // default €13.99
+    const price = parseInt(process.env.ROUTES_LICENSE_PRICE || '1399'); // default €13.99
 
-    // Validate price
-    if (isNaN(price) || price <= 0) {
+    // Check if user already has active license
+    const existingLicense = await hasActiveLicense(userId);
+    if (existingLicense) {
       return res.status(400).json({ 
-        error: 'Invalid amount specified',
-        details: 'Amount must be a positive number'
+        error: 'You already have an active license',
+        expiresAt: existingLicense.expires_at
       });
-    }
-
-    // Only check for existing license if purchasing full bundle
-    if (!requestedAmount || requestedAmount >= 1399) {
-      const existingLicense = await hasActiveLicense(userId);
-      if (existingLicense) {
-        return res.status(400).json({ 
-          error: 'You already have an active license',
-          expiresAt: existingLicense.expires_at
-        });
-      }
     }
 
     console.log('Creating PaymentIntent for user:', userId);
     console.log('Price:', price, 'cents (€' + (price / 100).toFixed(2) + ')');
-
-    // Determine product name based on amount
-    const productName = price >= 1399 
-      ? '3-Month Route Access License (Full Bundle)'
-      : 'Single Route Access';
 
     // Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
@@ -191,14 +172,12 @@ router.post('/create-payment-intent', authMiddleware, async (req, res) => {
       currency: 'eur',
       metadata: {
         user_id: userId.toString(),
-        product: productName,
-        amount: price.toString(),
-        purchase_type: price >= 1399 ? 'bundle' : 'single'
+        product: '3-Month Route Access License',
       },
       automatic_payment_methods: {
         enabled: true,
       },
-      description: productName,
+      description: '3-Month Route Access License',
     });
 
     console.log('PaymentIntent created:', paymentIntent.id);
@@ -484,13 +463,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Handle payment_intent.succeeded event (for PaymentIntent flow)
   if (event.type === 'payment_intent.succeeded') {
     const paymentIntent = event.data.object;
-    
-    if (!paymentIntent) {
-      console.error('No payment intent in webhook event');
-      return res.status(400).json({ error: 'No payment intent in event' });
-    }
-
-    const userId = paymentIntent.metadata?.user_id;
+    const userId = paymentIntent.metadata.user_id;
 
     if (!userId) {
       console.error('No user_id in payment intent metadata');
@@ -509,19 +482,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         return res.json({ received: true, message: 'License already exists' });
       }
 
-      // Check purchase type from metadata
-      const purchaseType = paymentIntent.metadata?.purchase_type || 'bundle';
-      const amount = paymentIntent.amount ? parseInt(paymentIntent.amount) : 1399;
-      
-      // For now, grant 3-month license for both bundle and single
-      // Single route purchases could be handled differently in the future
+      // Calculate expiry (3 months from now)
       const expiresAt = new Date();
-      if (purchaseType === 'bundle' || amount >= 1399) {
-        expiresAt.setMonth(expiresAt.getMonth() + 3);
-      } else {
-        // Single route - grant 30-day access (or could be handled differently)
-        expiresAt.setDate(expiresAt.getDate() + 30);
-      }
+      expiresAt.setMonth(expiresAt.getMonth() + 3);
 
       // Create license record
       await pool.query(
