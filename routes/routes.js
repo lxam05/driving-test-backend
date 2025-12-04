@@ -484,7 +484,13 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Handle payment_intent.succeeded event (for PaymentIntent flow)
   if (event.type === 'payment_intent.succeeded') {
     const paymentIntent = event.data.object;
-    const userId = paymentIntent.metadata.user_id;
+    
+    if (!paymentIntent) {
+      console.error('No payment intent in webhook event');
+      return res.status(400).json({ error: 'No payment intent in event' });
+    }
+
+    const userId = paymentIntent.metadata?.user_id;
 
     if (!userId) {
       console.error('No user_id in payment intent metadata');
@@ -504,8 +510,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       }
 
       // Check purchase type from metadata
-      const purchaseType = paymentIntent.metadata.purchase_type || 'bundle';
-      const amount = parseInt(paymentIntent.amount);
+      const purchaseType = paymentIntent.metadata?.purchase_type || 'bundle';
+      const amount = paymentIntent.amount ? parseInt(paymentIntent.amount) : 1399;
       
       // For now, grant 3-month license for both bundle and single
       // Single route purchases could be handled differently in the future
