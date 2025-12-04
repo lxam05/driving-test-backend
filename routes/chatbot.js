@@ -1,8 +1,11 @@
 import express from 'express';
 import OpenAI from 'openai';
 import authMiddleware from '../middleware/auth.js';
+import pool from '../db.js';
 
 const router = express.Router();
+
+const MAX_QUESTIONS_PER_DAY = 8;
 
 // Initialize OpenAI client lazily (only when needed)
 function getOpenAIClient() {
@@ -87,15 +90,97 @@ router.get('/test', authMiddleware, (req, res) => {
   });
 });
 
+// Helper function to check and increment daily question count
+async function checkAndIncrementUsage(userId) {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  // Get or create today's usage record
+  let result = await pool.query(
+    `SELECT question_count FROM chatbot_usage 
+     WHERE user_id = $1 AND usage_date = $2`,
+    [userId, today]
+  );
+
+  let currentCount = 0;
+  if (result.rows.length > 0) {
+    currentCount = result.rows[0].question_count;
+  } else {
+    // Create new record for today
+    await pool.query(
+      `INSERT INTO chatbot_usage (user_id, usage_date, question_count) 
+       VALUES ($1, $2, 0)`,
+      [userId, today]
+    );
+  }
+
+  // Check if limit reached
+  if (currentCount >= MAX_QUESTIONS_PER_DAY) {
+    return { allowed: false, remaining: 0, total: MAX_QUESTIONS_PER_DAY };
+  }
+
+  // Increment count
+  await pool.query(
+    `UPDATE chatbot_usage 
+     SET question_count = question_count + 1, updated_at = NOW()
+     WHERE user_id = $1 AND usage_date = $2`,
+    [userId, today]
+  );
+
+  return { 
+    allowed: true, 
+    remaining: MAX_QUESTIONS_PER_DAY - (currentCount + 1), 
+    total: MAX_QUESTIONS_PER_DAY 
+  };
+}
+
+// GET /chatbot/usage - Get current usage status (protected route)
+router.get('/usage', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const today = new Date().toISOString().split('T')[0];
+    
+    const result = await pool.query(
+      `SELECT question_count FROM chatbot_usage 
+       WHERE user_id = $1 AND usage_date = $2`,
+      [userId, today]
+    );
+
+    const currentCount = result.rows.length > 0 ? result.rows[0].question_count : 0;
+    const remaining = Math.max(0, MAX_QUESTIONS_PER_DAY - currentCount);
+
+    res.json({
+      used: currentCount,
+      remaining: remaining,
+      total: MAX_QUESTIONS_PER_DAY,
+      limitReached: currentCount >= MAX_QUESTIONS_PER_DAY
+    });
+  } catch (err) {
+    console.error('Error getting chatbot usage:', err);
+    res.status(500).json({ error: 'Failed to get usage status' });
+  }
+});
+
 // POST /chatbot/message - Send message to chatbot (protected route)
 router.post('/message', authMiddleware, async (req, res) => {
   console.log('🔥 CHATBOT MESSAGE ROUTE HIT');
   try {
     const { message, conversationHistory = [] } = req.body;
+    const userId = req.user.user_id;
 
     // Validate message
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required and must be a non-empty string' });
+    }
+
+    // Check daily usage limit
+    const usage = await checkAndIncrementUsage(userId);
+    if (!usage.allowed) {
+      return res.status(429).json({ 
+        error: 'Daily question limit reached',
+        details: `You have reached the maximum of ${MAX_QUESTIONS_PER_DAY} questions per day. Please try again tomorrow.`,
+        remaining: 0,
+        total: MAX_QUESTIONS_PER_DAY
+      });
     }
 
     // Check if OpenAI API key is configured
@@ -128,6 +213,10 @@ router.post('/message', authMiddleware, async (req, res) => {
     res.json({
       response: aiResponse,
       model: completion.model,
+      usage: {
+        remaining: usage.remaining,
+        total: usage.total
+      }
     });
 
   } catch (err) {

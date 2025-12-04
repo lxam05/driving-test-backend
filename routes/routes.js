@@ -851,5 +851,92 @@ router.get('/naas-route/:token/:routeId', async (req, res) => {
   }
 });
 
+// POST /routes/waitlist - Add email to waitlist for a test route
+router.post('/waitlist', async (req, res) => {
+  try {
+    const { email, testCentre } = req.body;
+
+    // Validate input
+    if (!email || !testCentre) {
+      return res.status(400).json({ 
+        error: 'Email and test centre are required' 
+      });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Invalid email format' 
+      });
+    }
+
+    // Sanitize test centre input - remove any potentially dangerous characters
+    // Only allow letters, numbers, spaces, hyphens, apostrophes, and common punctuation
+    let sanitizedCentre = testCentre.trim().replace(/[^A-Za-z0-9\s\-'.,()]/g, '');
+    
+    // Limit length to prevent abuse
+    if (sanitizedCentre.length > 100) {
+      sanitizedCentre = sanitizedCentre.substring(0, 100);
+    }
+
+    // Validate sanitized input
+    if (!sanitizedCentre || sanitizedCentre.length < 2) {
+      return res.status(400).json({ 
+        error: 'Test centre name must be at least 2 characters and contain only letters, numbers, spaces, hyphens, and apostrophes' 
+      });
+    }
+
+    // Check if already on waitlist (using sanitized input)
+    const existing = await pool.query(
+      `SELECT id FROM route_waitlist 
+       WHERE email = $1 AND test_centre = $2 
+       AND route_number IS NULL`,
+      [email, sanitizedCentre]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(200).json({ 
+        message: 'You are already on the waitlist for this test centre!',
+        alreadyExists: true
+      });
+    }
+
+    // Generate discount code (simple format: WAITLIST-XXXX)
+    const discountCode = `WAITLIST-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    // Add to waitlist (using parameterized query for safety - no SQL injection possible)
+    await pool.query(
+      `INSERT INTO route_waitlist (email, test_centre, route_number, discount_code)
+       VALUES ($1, $2, NULL, $3)`,
+      [email, sanitizedCentre, discountCode]
+    );
+
+    console.log(`✅ Added ${email} to waitlist for ${sanitizedCentre}`);
+
+    res.status(201).json({
+      message: 'Successfully added to waitlist! You will receive a discount code when the route is released.',
+      discountCode: discountCode,
+      testCentre: sanitizedCentre
+    });
+
+  } catch (err) {
+    console.error('Error adding to waitlist:', err);
+    
+    // Handle unique constraint violation
+    if (err.code === '23505') {
+      return res.status(200).json({ 
+        message: 'You are already on the waitlist for this test centre!',
+        alreadyExists: true
+      });
+    }
+
+    res.status(500).json({ 
+      error: 'Failed to add to waitlist',
+      details: err.message 
+    });
+  }
+});
+
 export default router;
 
