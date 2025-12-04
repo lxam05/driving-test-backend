@@ -152,15 +152,21 @@ router.post('/create-payment-intent', authMiddleware, async (req, res) => {
     }
 
     const userId = req.user.user_id;
-    const price = parseInt(process.env.ROUTES_LICENSE_PRICE || '1399'); // default €13.99
+    
+    // Support custom amount (for single route vs bundle)
+    // amount in cents: 299 for single route, 1399 for full bundle
+    const requestedAmount = req.body.amount ? parseInt(req.body.amount) : null;
+    const price = requestedAmount || parseInt(process.env.ROUTES_LICENSE_PRICE || '1399'); // default €13.99
 
-    // Check if user already has active license
-    const existingLicense = await hasActiveLicense(userId);
-    if (existingLicense) {
-      return res.status(400).json({ 
-        error: 'You already have an active license',
-        expiresAt: existingLicense.expires_at
-      });
+    // Only check for existing license if purchasing full bundle
+    if (!requestedAmount || requestedAmount >= 1399) {
+      const existingLicense = await hasActiveLicense(userId);
+      if (existingLicense) {
+        return res.status(400).json({ 
+          error: 'You already have an active license',
+          expiresAt: existingLicense.expires_at
+        });
+      }
     }
 
     console.log('Creating PaymentIntent for user:', userId);
