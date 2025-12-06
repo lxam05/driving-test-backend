@@ -5,7 +5,7 @@ import pool from '../db.js';
 
 const router = express.Router();
 
-const MAX_QUESTIONS_PER_DAY = 8;
+const MAX_QUESTIONS_PER_DAY = 4;
 
 // Initialize OpenAI client lazily (only when needed)
 function getOpenAIClient() {
