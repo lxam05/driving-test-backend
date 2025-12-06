@@ -28,21 +28,27 @@ const optionalAuth = (req, res, next) => {
 
 // Create transporter (using environment variables)
 // For Gmail, you'll need an App Password: https://support.google.com/accounts/answer/185833
+// Railway may block port 587, so we default to 465 (SSL) which is more reliable
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+  port: parseInt(process.env.SMTP_PORT || "465"),
+  secure: process.env.SMTP_SECURE !== "false", // true for 465, false for 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 // Verify transporter configuration
 if (process.env.SMTP_USER && process.env.SMTP_PASS) {
   console.log("📧 SMTP configured with user:", process.env.SMTP_USER);
   console.log("📧 SMTP host:", process.env.SMTP_HOST || "smtp.gmail.com");
-  console.log("📧 SMTP port:", process.env.SMTP_PORT || "587");
+  const smtpPort = parseInt(process.env.SMTP_PORT || "465");
+  console.log("📧 SMTP port:", smtpPort);
+  console.log("📧 SMTP secure:", process.env.SMTP_SECURE !== "false");
   transporter.verify((error, success) => {
     if (error) {
       console.error("❌ SMTP configuration error:", error);
