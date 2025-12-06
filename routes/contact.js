@@ -40,13 +40,26 @@ const transporter = nodemailer.createTransport({
 
 // Verify transporter configuration
 if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+  console.log("📧 SMTP configured with user:", process.env.SMTP_USER);
+  console.log("📧 SMTP host:", process.env.SMTP_HOST || "smtp.gmail.com");
+  console.log("📧 SMTP port:", process.env.SMTP_PORT || "587");
   transporter.verify((error, success) => {
     if (error) {
       console.error("❌ SMTP configuration error:", error);
+      console.error("Error details:", {
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
     } else {
       console.log("✅ SMTP server is ready to send emails");
     }
   });
+} else {
+  console.warn("⚠️ SMTP not configured - SMTP_USER or SMTP_PASS missing");
+  console.warn("SMTP_USER:", process.env.SMTP_USER ? "Set" : "Missing");
+  console.warn("SMTP_PASS:", process.env.SMTP_PASS ? "Set" : "Missing");
 }
 
 // POST /contact/send - Send contact message (optional auth)
@@ -113,9 +126,19 @@ router.post("/send", optionalAuth, async (req, res) => {
     };
 
     // Send email
-    await transporter.sendMail(mailOptions);
-
-    console.log(`✅ Contact message sent from ${userEmail}`);
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Contact message sent from ${userEmail} to ${recipientEmail}`);
+    } catch (emailError) {
+      console.error("❌ Email sending failed:", emailError);
+      console.error("Error details:", {
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response,
+        responseCode: emailError.responseCode
+      });
+      throw emailError; // Re-throw to be caught by outer catch
+    }
 
     res.status(200).json({
       message: "Thank you for your message. We'll get back to you soon.",
@@ -123,6 +146,7 @@ router.post("/send", optionalAuth, async (req, res) => {
 
   } catch (err) {
     console.error("❌ Error sending contact message:", err);
+    console.error("Full error:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
     res.status(500).json({
       error: "Failed to send message. Please try again later.",
       details: process.env.NODE_ENV === "development" ? err.message : undefined,
